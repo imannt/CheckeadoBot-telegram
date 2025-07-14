@@ -3,7 +3,7 @@ import mysql.connector
 
 app = Flask(__name__)
 
-# 🔌 Conexión a base principal: fundacion_eventos
+# Conexión a base principal: fundacion_eventos
 conexion_main = mysql.connector.connect(
     host="localhost",
     user="root",
@@ -11,7 +11,7 @@ conexion_main = mysql.connector.connect(
     database="fundacion_eventos"
 )
 
-# 🔌 Conexión a base territorial: geo_venezuela
+# Conexión a base territorial: geo_venezuela
 conexion_geo = mysql.connector.connect(
     host="localhost",
     user="root",
@@ -19,7 +19,7 @@ conexion_geo = mysql.connector.connect(
     database="geo_venezuela"
 )
 
-# 🧠 Ruta: verificar si participante existe
+# Ruta: verificar si participante existe
 @app.route("/verificar/<int:id_usuario>", methods=["GET"])
 def verificar_usuario(id_usuario):
     cursor = conexion_main.cursor(dictionary=True)
@@ -59,7 +59,7 @@ def registrar_participante():
             datos["municipio"],
             datos["parroquia"]
         ))
-        conexion_geo.commit()
+        conexion_main.commit()
         cursor.close()
         return jsonify({"mensaje": "Registro exitoso"}), 201
 

@@ -8,6 +8,7 @@ from telegram.ext import (
     filters
 )
 from datetime import datetime
+import re
 import requests
 import os
 from dotenv import load_dotenv
@@ -34,24 +35,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if registrado:
         mensaje = f"""
-👋 ¡Hola de nuevo, {nombre}!
+            👋 ¡Hola de nuevo, {nombre}!
 
-Ya estás registrado en nuestro sistema 🟢.
+            Ya estás registrado en nuestro sistema 🟢.
 
-Puedes usar los siguientes comandos para interactuar con el bot:
-/asistencia - Registrar tu asistencia.
-/actualizacion - Actualizar tus datos.
-/eventos - Ver tus eventos asistidos.
-"""
+            Puedes usar los siguientes comandos para interactuar con el bot:
+            /asistencia - Registrar tu asistencia.
+            /actualizacion - Actualizar tus datos.
+            /eventos - Ver tus eventos asistidos.
+        """
         await update.message.reply_text(mensaje)
         return ConversationHandler.END
     else:
-        await update.message.reply_text(
-            "👋 ¡Hola! Escribe tu primer y segundo nombre para comenzar tu registro 📝."
+        await update.message.reply_text(f"""
+                👋 ¡Hola, {nombre}!
+                Estás usando Checkeado, un chatbot para registrar asistencia en los eventos de la Fundación KPMG Venezuela 🌱
+
+                Aquí podrás:
+                🔸 Registrar tus datos personales
+                🔸 Confirmar tu participación en eventos
+                🔸 Recibir notificaciones directamente por Telegram
+
+                Por favor, escribe tu primer y segundo nombre para comenzar 📝.
+            """
         )
         return NOMBRE
 
-# 🧩 Registro progresivo
+# *** Registro del usuario ***
 async def apellido(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['nombre'] = update.message.text.strip()
     await update.message.reply_text("Ahora escribe tu apellido completo:")
@@ -59,25 +69,25 @@ async def apellido(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cedula(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['apellido'] = update.message.text.strip()
-    await update.message.reply_text("Escribe tu número de cédula:")
+    await update.message.reply_text("Introduce tu número de cédula, sin agregar puntos. ej: 12345678")
     return CEDULA
 
 async def correo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['cedula'] = update.message.text.strip()
-    await update.message.reply_text("Escribe tu correo electrónico:")
+    await update.message.reply_text("Introduce tu correo electrónico:")
     return CORREO
 
 async def telefono(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['correo'] = update.message.text.strip()
     boton = KeyboardButton(text="📱 Compartir número", request_contact=True)
     teclado = ReplyKeyboardMarkup([[boton]], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("Presiona el botón para compartir tu número de teléfono:", reply_markup=teclado)
+    await update.message.reply_text("Presiona el botón para compartir tu número de teléfono o escríbelo sin agregar guiones o paréntesis.", reply_markup=teclado)
     return TELEFONO
 
 async def fecha_nac(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contacto = update.message.contact
     context.user_data['telefono'] = contacto.phone_number if contacto else update.message.text.strip()
-    await update.message.reply_text("Escribe tu fecha de nacimiento (DD/MM/AAAA):")
+    await update.message.reply_text("Introduce tu fecha de nacimiento (DD/MM/AAAA):")
     return FECHA_NAC
 
 async def sexo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,7 +101,7 @@ async def sexo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     opciones = [["Mujer", "Hombre", "Prefiero no decirlo"]]
     teclado = ReplyKeyboardMarkup(opciones, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("Selecciona tu sexo biológico:", reply_markup=teclado)
+    await update.message.reply_text("Selecciona tu sexo según los botones:", reply_markup=teclado)
     return SEXO
 
 async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,7 +121,7 @@ async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Selecciona tu estado:", reply_markup=teclado)
         return ESTADO
     except Exception:
-        await update.message.reply_text("❌ No se pudo obtener la lista de estados.")
+        await update.message.reply_text("❌ No se pudo obtener la lista de estados. Inténtalo más tarde.")
         return ConversationHandler.END
 
 async def municipio(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,7 +143,7 @@ async def municipio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Selecciona tu municipio:", reply_markup=teclado)
         return MUNICIPIO
     except Exception:
-        await update.message.reply_text("❌ Error al obtener los municipios.")
+        await update.message.reply_text("❌ Error al obtener los municipios. Inténtalo más tarde.")
         return ConversationHandler.END
 
 async def parroquia(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,7 +166,7 @@ async def parroquia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Selecciona tu parroquia:", reply_markup=teclado)
         return PARROQUIA  # o el siguiente paso como confirmación
     except Exception:
-        await update.message.reply_text("❌ Error al obtener las parroquias.")
+        await update.message.reply_text("❌ Error al obtener las parroquias. Inténtalo más tarde.")
         return ConversationHandler.END
 
 
