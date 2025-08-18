@@ -1,4 +1,5 @@
-pyTelegramBotAPI
-mysql-connector-python
-python-dotenv
 Flask
+python-dotenv
+python-telegram-bot
+requests
+mysql-connector-python

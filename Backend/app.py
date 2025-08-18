@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 import mysql.connector
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -19,11 +20,11 @@ conexion_geo = mysql.connector.connect(
     database="geo_venezuela"
 )
 
-# Ruta: verificar si participante existe
+# Ruta: verificar si usuario existe
 @app.route("/verificar/<int:id_usuario>", methods=["GET"])
 def verificar_usuario(id_usuario):
     cursor = conexion_main.cursor(dictionary=True)
-    cursor.execute("SELECT nombre FROM participante WHERE id_participante = %s", (id_usuario,))
+    cursor.execute("SELECT nombre FROM usuario WHERE id_usuario = %s", (id_usuario,))
     resultado = cursor.fetchone()
 
     if resultado:
@@ -34,20 +35,58 @@ def verificar_usuario(id_usuario):
 # Ruta: registrar nuevo participante
 from mysql.connector import Error
 
+# Formatear la fecha y hora antes de devolver la respuesta
+dias_semana = {
+    "Monday": "Lunes",
+    "Tuesday": "Martes",
+    "Wednesday": "Miércoles",
+    "Thursday": "Jueves",
+    "Friday": "Viernes",
+    "Saturday": "Sábado",
+    "Sunday": "Domingo"
+}
+
+
 @app.route("/registrar", methods=["POST"])
 def registrar_participante():
     try:
         datos = request.json
-        print("📦 Datos recibidos:", datos)
-
-        # Aquí va tu lógica de inserción, por ejemplo:
         cursor = conexion_main.cursor()
+
+        id_usuario = datos.get("id_usuario")
+
+        # Paso 0: Verificar si el usuario ya existe para evitar duplicados
+        cursor.execute("SELECT id_usuario FROM usuario WHERE id_usuario = %s", (id_usuario,))
+        usuario_existente = cursor.fetchone()
+
+        if usuario_existente:
+            return jsonify({"error": "El usuario ya está registrado."}), 400
+        
+        # Paso 1: Verificar y/o insertar la organización
+        organizacion_nombre = datos.get("organizacion")
+        id_organizacion = None
+        
+        # Buscar si la organización ya existe
+        cursor.execute("SELECT id_organizacion FROM organizacion WHERE nombre = %s", (organizacion_nombre,))
+        org_data = cursor.fetchone()
+
+        if org_data:
+            id_organizacion = org_data[0]
+        else:
+            # Si la organización no existe, la insertamos y obtenemos su ID
+            cursor.execute("INSERT INTO organizacion (nombre) VALUES (%s)", (organizacion_nombre,))
+            conexion_main.commit()
+            id_organizacion = cursor.lastrowid # Obtiene el último ID insertado
+
+        # Paso 2: Insertar el usuario en la tabla `usuario`
+
         cursor.execute("""
-            INSERT INTO participante 
-            (id_participante, nombre, apellido, cedula, correo, telefono, fecha_nac, sexo, estado, municipio, parroquia)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO usuario 
+            (id_usuario, id_usertelegram, nombre, apellido, cedula, correo, telefono, fecha_nac, sexo, estado, municipio, parroquia)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            datos["id_participante"],
+            datos["id_usuario"],
+            datos["id_usuario"],
             datos["nombre"],
             datos["apellido"],
             datos["cedula"],
@@ -59,7 +98,27 @@ def registrar_participante():
             datos["municipio"],
             datos["parroquia"]
         ))
+
         conexion_main.commit()
+        print("Usuario insertado correctamente.")
+
+        # Paso 3: Obtener el ID del rol de "Participante"
+        cursor.execute("SELECT id_rol FROM rol WHERE nombre = 'Participante'")
+        id_rol_participante = cursor.fetchone()
+        
+        if not id_rol_participante:
+            raise Exception("Rol 'Participante' no encontrado en la base de datos.")
+            
+        id_rol = id_rol_participante[0]
+
+        # Paso 4: Asociar al usuario con la organización y el rol
+        cursor.execute("""
+            INSERT INTO usuario_rol (id_usuario, id_organizacion, id_rol)
+            VALUES (%s, %s, %s)
+        """, (datos["id_usuario"], id_organizacion, id_rol))
+
+        conexion_main.commit()
+
         cursor.close()
         return jsonify({"mensaje": "Registro exitoso"}), 201
 
@@ -70,6 +129,135 @@ def registrar_participante():
     except Exception as e:
         print(f"⚠️ Error general: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# Ruta: Buscar un evento por su clave de acceso
+@app.route("/evento/<clave>", methods=["GET"])
+def obtener_evento_por_clave(clave):
+    try:
+        cursor = conexion_main.cursor(dictionary=True)
+        cursor.execute("SELECT id_evento, nombre, fecha, hora_inicio, hora_fin, descripcion, modalidad FROM evento WHERE clave_acceso = %s", (clave,))
+        evento = cursor.fetchone()
+        cursor.close()
+        
+        if evento:
+            # Convertir objetos de tiempo a cadenas de texto para que sean serializables por JSON
+            if evento.get('hora_inicio') and evento.get('hora_fin') and evento.get('fecha'):
+                fecha_obj = evento['fecha']
+                hora_inicio = datetime.strptime(str(evento['hora_inicio']), "%H:%M:%S").time()
+                hora_fin = datetime.strptime(str(evento['hora_fin']), "%H:%M:%S").time()
+
+                # Día de la semana en español
+                dia_semana = dias_semana[fecha_obj.strftime("%A")]
+                # Formato: "Día, DD-MM-YYYY"
+                evento['fecha'] = f"{dia_semana}, {fecha_obj.strftime('%d-%m-%Y')}"
+
+                # Formato: "HH:MM AM/PM"
+                evento['hora_inicio'] = hora_inicio.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
+                evento['hora_fin'] = hora_fin.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
+
+
+            return jsonify(evento), 200
+        else:
+            return jsonify({"error": "Evento no encontrado"}), 404
+            
+    except Error as err:
+        return jsonify({"error": str(err)}), 500
+
+# Ruta: Registrar un usuario en un evento
+@app.route("/asistencia", methods=["POST"])
+def registrar_evento():
+    try:
+        datos = request.json
+        id_usuario = datos.get("id_usuario")
+        id_evento = datos.get("id_evento")
+
+        if not id_usuario or not id_evento:
+            return jsonify({"error": "Faltan datos."}), 400
+
+        cursor = conexion_main.cursor(dictionary=True)
+
+                # 1. Obtener la información del evento
+        cursor.execute("SELECT fecha, hora_inicio, hora_fin FROM evento WHERE id_evento = %s", (id_evento,))
+        evento_info = cursor.fetchone()
+
+        if not evento_info:
+            return jsonify({"error": "Evento no encontrado."}), 404
+
+        # 2. Validar la fecha y hora de registro
+        fecha_evento = evento_info['fecha']
+        hora_inicio_evento = datetime.strptime(str(evento_info['hora_inicio']), "%H:%M:%S").time()
+        hora_fin_evento = datetime.strptime(str(evento_info['hora_fin']), "%H:%M:%S").time()
+
+        ahora = datetime.now()
+        fecha_actual = ahora.date()
+        hora_actual = ahora.time()
+
+        # Validación 1: Fecha del evento
+        if fecha_actual < fecha_evento:
+            return jsonify({"error": "El registro aún no está disponible. Por favor, intente el día del evento."}), 400	
+        if fecha_actual > fecha_evento:
+            return jsonify({"error": "El registro para este evento ya ha finalizado."}), 400
+
+        # Validación 2: Hora del evento (solo si la fecha es hoy)
+        # La hora de la base de datos es de tipo datetime.time. No es necesario convertir
+        if not (hora_inicio_evento <= hora_actual <= hora_fin_evento):
+            hora_inicio_evento = hora_inicio_evento.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
+            hora_fin_evento = hora_fin_evento.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
+            return jsonify({"error": f"Se ha caducado el tiempo de registro. Solo está disponible de {hora_inicio_evento} a {hora_fin_evento}"}), 400
+
+        # 3. Verifica si el usuario ya está registrado en este evento
+        cursor.execute("SELECT fecha_registro, hora_registro FROM usuario_evento WHERE id_usuario = %s AND id_evento = %s", (id_usuario, id_evento))
+        registro_existente = cursor.fetchone()
+
+        if registro_existente:
+            mensaje = "📝 Ya estás registrado en este evento."
+            fecha_asistencia_str = datetime.strptime(str(registro_existente['fecha_registro']), "%Y-%m-%d").date()
+            hora_asistencia_str = datetime.strptime(str(registro_existente['hora_registro']), "%H:%M:%S").time()
+            status_code = 200
+
+            print(f"jsonify: {mensaje}, {status_code}")
+        else:
+
+            # Si no existe, realiza el registro
+            fecha_asistencia_str = fecha_actual
+            hora_asistencia_str = hora_actual
+            estatus_asistencia = 1
+            
+            cursor.execute("""
+                INSERT INTO usuario_evento (id_usuario, id_evento, estatus_asistencia, fecha_registro, hora_registro )
+                VALUES (%s, %s, %s, %s, %s)
+            """, (id_usuario, id_evento, estatus_asistencia, fecha_asistencia_str, hora_asistencia_str))
+
+            conexion_main.commit()
+            
+            mensaje = "✅ ¡Te has registrado en el evento con éxito!"
+            status_code = 201
+
+        dia_semana = dias_semana[fecha_asistencia_str.strftime("%A")]
+
+        # Formatear la fecha y hora antes de devolver la respuesta
+        fecha_asistencia_td = f"{dia_semana}, {fecha_asistencia_str.strftime('%d-%m-%Y')}  "
+        hora_asistencia_td = hora_asistencia_str.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
+
+        cursor.close()
+    
+        return jsonify({
+            "mensaje": mensaje,
+            "fecha_registro": fecha_asistencia_td,
+            "hora_registro": hora_asistencia_td
+        }), status_code
+
+
+    except Error as err:
+        conexion_main.rollback()
+        return jsonify({"error": str(err)}), 500
+    except Exception as e:
+        conexion_main.rollback()
+        return jsonify({"Exception": str(e)}), 500
+
+
+
 
 # Ruta: obtener todos los estados
 @app.route("/estados", methods=["GET"])

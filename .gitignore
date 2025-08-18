@@ -7,6 +7,9 @@ env/
 __pycache__/
 *.pyc
 
+# ignorar proyecto checkeado_dashboard
+checkeado_dashboard/
+
 # Archivos sensibles
 .env
 
