@@ -38,28 +38,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         registrado = False
 
     if registrado:
-        mensaje = f"""
-            👋 ¡Hola de nuevo, {nombre}!
-
-            Ya estás registrado en nuestro sistema 🟢.
-
-            Puedes usar los siguientes comandos para interactuar con el bot:
-            /asistencia - Registrar tu asistencia.
+        mensaje = f"""👋 ¡Hola de nuevo, {nombre}!\n 
+🟢 *Ya estás registrado en nuestro sistema.* \n
+Puedes usar los siguientes comandos para interactuar con el bot:\n
+/asistencia - Registrar tu asistencia.
         """
-        await update.message.reply_text(mensaje)
+        await update.message.reply_text(mensaje, parse_mode="Markdown")
         return ConversationHandler.END
     else:
-        await update.message.reply_text(f"""
-                👋 ¡Hola, {nombre}!
-                Estás usando Checkeado, un chatbot para registrar tu asistencia de eventos sociales.
-
-                Aquí podrás:
-                🔸 Confirmar tu participación en eventos.
-            """
-        )
-        await update.message.reply_text(
-            "📝 Antes de comenzar, por favor, escribe tu primer y segundo nombre."
-        )
+        await update.message.reply_text(f"""👋 ¡Hola, {nombre}!\n 
+Estás usando *Checkeado*, un bot para gestionar tu asistencia en eventos sociales.\n""", parse_mode="Markdown")
+        await update.message.reply_text("📝 Antes de comenzar, por favor, escribe tu *primer* y *segundo* nombre.", parse_mode="Markdown")
         return NOMBRE
 
 # ***Cancelar operación***
@@ -150,10 +139,13 @@ def teclado_dinamico(opciones):
 # *** Registro del usuario ***
 async def nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
-    if not texto or len(texto.split()) < 2:
-        await update.message.reply_text("⚠️ tu nombre debe tener al menos dos palabras. Por favor, inténtalo de nuevo.")
-        return NOMBRE
-    context.user_data['nombre'] = texto  # Guardamos el nombre en user_data
+
+    #restricción para evitar nombres con menos de dos palabras
+    # if not texto or len(texto.split()) < 2:
+        # await update.message.reply_text("⚠️ tu nombre debe tener al menos dos palabras. Por favor, inténtalo de nuevo.")
+        # return NOMBRE
+
+    context.user_data['nombre'] = texto  
     
     if context.user_data.get("modificando_desde_resumen"):
         context.user_data["modificando_desde_resumen"] = False
