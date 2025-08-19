@@ -1,34 +1,38 @@
 from flask import Flask, jsonify, request
 import mysql.connector.pooling
 from datetime import datetime
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 app = Flask(__name__)
 
 # Conexión a base principal: fundacion_eventos
 conexion_main = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
-    "database": "fundacion_eventos"
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME_MAIN")
 }
 
 pool_main = mysql.connector.pooling.MySQLConnectionPool(
     pool_name="pool_main",
-    pool_size=5,
+    pool_size= 30,
     **conexion_main
 )
 
 # Conexión a base territorial: geo_venezuela
 conexion_geo = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
-    "database": "geo_venezuela"
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME_GEO")
 }
 
 pool_main_geo = mysql.connector.pooling.MySQLConnectionPool(
     pool_name="pool_main_geo",
-    pool_size=5,
+    pool_size= 30,
     **conexion_geo
 )
 
@@ -43,6 +47,7 @@ def verificar_usuario(id_usuario):
 
     cursor.close()
     cnx.close()
+
      # Si el usuario existe, devuelve su nombre; si no, devuelve un mensaje de error
     if resultado:
         return jsonify({"registrado": True, "nombre": resultado["nombre"]})
@@ -62,7 +67,6 @@ dias_semana = {
     "Saturday": "Sábado",
     "Sunday": "Domingo"
 }
-
 
 @app.route("/registrar", methods=["POST"])
 def registrar_participante():
