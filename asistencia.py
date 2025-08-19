@@ -8,20 +8,41 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-import requests
+import aiohttp
 import json
 
-# NUEVOS ESTADOS para el flujo de registro de evento
+# ESTADOS para el flujo de registro de evento
 EVENTO_CLAVE, EVENTO_CONFIRMAR = range(2)
 
-# 🆕 Flujo para registrarse en un evento por clave
+# Flujo para registrarse en un evento por clave
 async def registrar_evento_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Inicia el flujo de conversación para registrarse en un evento.
-    Pide al usuario que ingrese la clave del evento.
+    Primero, verifica si el usuario está registrado. Si no, le pide que use /start.
     """
-    await update.message.reply_text("Por favor, ingresa la clave del evento:")
-    return EVENTO_CLAVE
+    user_id = update.effective_user.id
+    
+    try:
+        # 🆕 Usamos aiohttp para la llamada a la API de forma asíncrona
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:5000/verificar/{user_id}") as respuesta:
+                resultado = await respuesta.json()
+                registrado = resultado.get("registrado", False)
+    except Exception as e:
+        # Maneja cualquier error de conexión a la API
+        print(f"Error al conectar con la API de verificación: {e}")
+        registrado = False
+
+    if registrado:
+        # El usuario está registrado, continuamos con el flujo normal
+        await update.message.reply_text("Por favor, ingresa la clave del evento:")
+        return EVENTO_CLAVE
+    else:
+        # El usuario no está registrado, se lo notificamos y terminamos la conversación
+        await update.message.reply_text(
+            "👋 Parece que aún no estás registrado. Por favor, usa el comando /start para iniciar el proceso de registro."
+        )
+        return ConversationHandler.END
 
 async def evento_clave(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -33,34 +54,36 @@ async def evento_clave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # Petición a la API para obtener los detalles del evento
-        respuesta = requests.get(f"http://localhost:5000/evento/{clave}")
-        evento_data = respuesta.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:5000/evento/{clave}") as response:
+                evento_data = await response.json()
 
-        if respuesta.status_code == 200:
-            context.user_data["evento_info"] = evento_data
-            
-            # Mensaje con los detalles del evento
-            mensaje = f"""*Detalles del Evento:*\n
-*Nombre del evento:* {evento_data.get('nombre')}.
-*Fecha:* {evento_data.get('fecha')}.
+                if response.status == 200:
+                    context.user_data["evento_info"] = evento_data
+                    
+                    # Mensaje con los detalles del evento
+                    mensaje = f"""*Detalles del Evento:*\n
+*Nombre del evento:* {evento_data.get('nombre')}
+*Fecha:* {evento_data.get('fecha')}
 *Hora:* {evento_data.get('hora_inicio')} - {evento_data.get('hora_fin')}
-*Modalidad:* {evento_data.get('modalidad')}.
-*Descripción:* {evento_data.get('descripcion')}.
+*Modalidad:* {evento_data.get('modalidad')}
+*Descripción:* {evento_data.get('descripcion')}
+*Ubicación:* {evento_data.get('ubicacion')}
 
 ¿Deseas registrarte como asistente a este evento?
 """
 
-            # Botones para confirmar o cancelar
-            keyboard = [[InlineKeyboardButton("Sí, registrarme", callback_data="asistir")],
-                        [InlineKeyboardButton("No, cancelar", callback_data="cancelar_evento")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(mensaje, reply_markup=reply_markup, parse_mode="Markdown")
-            return EVENTO_CONFIRMAR
-        else:
-            # Evento no encontrado
-            await update.message.reply_text(f"❌ No se encontró ningún evento con la clave '{clave}'. Por favor, intenta de nuevo.")
-            return EVENTO_CLAVE
+                    # Botones para confirmar o cancelar
+                    keyboard = [[InlineKeyboardButton("Sí, registrarme", callback_data="asistir")],
+                                [InlineKeyboardButton("No, cancelar", callback_data="cancelar_evento")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await update.message.reply_text(mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+                    return EVENTO_CONFIRMAR
+                else:
+                    # Evento no encontrado
+                    await update.message.reply_text(f"❌ No se encontró ningún evento con la clave '{clave}'. Por favor, intenta de nuevo.")
+                    return EVENTO_CLAVE
     except Exception as e:
         # Manejo de errores de conexión o API
         await update.message.reply_text("❌ Ocurrió un error al buscar el evento. Por favor, intenta nuevamente.")
@@ -86,25 +109,25 @@ async def evento_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             
             # Petición a la API para registrar al usuario
-            respuesta = requests.post("http://localhost:5000/asistencia", json=payload)
-            resultado = respuesta.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.post("http://localhost:5000/asistencia", json=payload) as respuesta:
+                    resultado = await respuesta.json()
 
-            print(f"resultado: {resultado}")  # Debugging
+                    print(f"resultado: {resultado}")  # Debugging
 
-            fecha_registro = resultado.get('fecha_registro')
-            hora_registro = resultado.get('hora_registro')
-            nombre_evento = evento_info.get('nombre')
+                    fecha_registro = resultado.get('fecha_registro')
+                    hora_registro = resultado.get('hora_registro')
+                    nombre_evento = evento_info.get('nombre')
 
-            if respuesta.status_code in [201, 200]:
-                await query.edit_message_text(f"""
-                    {resultado.get('mensaje')}\n *Detalles del registro:*\n
+                    if respuesta.status in [201, 200]:
+                        await query.edit_message_text(f"""{resultado.get('mensaje')}\n *Detalles del registro:*\n
 *Evento:* {nombre_evento}
 *Fecha de registro:* {fecha_registro}
 *Hora de registro:* {hora_registro}
 """, parse_mode="Markdown")
-            else:
-                error = resultado.get("error", "Error desconocido.")
-                await query.edit_message_text(f"❌ Hubo un problema: {error}")
+                    else:
+                        error = resultado.get("error", "Error desconocido.")
+                        await query.edit_message_text(f"❌ Hubo un problema: {error}")
 
         except Exception as e:
             await query.edit_message_text(f"❌ Ocurrió un error inesperado al registrarte. Intente más tarde.")
@@ -126,7 +149,7 @@ async def cancelar_evento(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Operación cancelada. Puedes usar /asistencia para registrarte en un evento.")
     return ConversationHandler.END
 
-# Nuevo handler para el registro de eventos
+# registro de eventos
 evento_handler = ConversationHandler(
     entry_points=[CommandHandler("asistencia", registrar_evento_command)],
     states={

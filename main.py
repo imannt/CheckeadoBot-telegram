@@ -10,8 +10,8 @@ from telegram.ext import (
 )
 from datetime import datetime
 import re
-import requests
 import os
+import aiohttp
 from dotenv import load_dotenv
 
 # Importa los handler
@@ -31,11 +31,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nombre = user.first_name or user.username or "Participante"
 
     try:
-        respuesta = requests.get(f"http://localhost:5000/verificar/{user_id}")
-        resultado = respuesta.json()
-        registrado = resultado.get("registrado", False)
+        #respuesta = requests.get(f"http://localhost:5000/verificar/{user_id}")
+        #resultado = respuesta.json()
+        #registrado = resultado.get("registrado", False)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:5000/verificar/{user_id}") as response:
+                resultado = await response.json()
+                registrado = resultado.get("registrado", False)
     except:
         registrado = False
+
 
     if registrado:
         mensaje = f"""👋 ¡Hola de nuevo, {nombre}!\n 
@@ -109,7 +114,7 @@ def teclado_sexo():
     return ReplyKeyboardMarkup(opciones, one_time_keyboard=True, resize_keyboard=True)
 
 # *** Funciones para obtener opciones de estados, municipios y parroquias **
-def obtener_opciones(tipo: str, estado=None, municipio=None):
+async def obtener_opciones(tipo: str, estado=None, municipio=None):
     base = "http://localhost:5000"
 
     if tipo == "estado":
@@ -122,11 +127,12 @@ def obtener_opciones(tipo: str, estado=None, municipio=None):
         return []
 
     try:
-        respuesta = requests.get(url)
-        opciones = respuesta.json()
-        if isinstance(opciones, dict) and "error" in opciones:
-            return []
-        return opciones if isinstance(opciones, list) else []
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                opciones = await response.json()
+                if isinstance(opciones, dict) and "error" in opciones:
+                    return []
+                return opciones if isinstance(opciones, list) else []
     except:
         return []
 
@@ -303,11 +309,12 @@ async def sexo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await mostrar_resumen(update, context)
 
     try:
-        respuesta = requests.get("http://localhost:5000/estados")
-        estados = respuesta.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://localhost:5000/estados") as response:
+                estados = await response.json()
 
-        if not isinstance(estados, list):
-            raise ValueError("Respuesta inesperada, intenta más tarde.")
+                if not isinstance(estados, list):
+                    raise ValueError("Respuesta inesperada, intenta más tarde.")
 
         teclado = teclado_dinamico(estados)
         await update.message.reply_text("Selecciona tu estado:", reply_markup=teclado)
@@ -325,11 +332,12 @@ async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["estado"] = texto
 
     try:
-        respuesta = requests.get(f"http://localhost:5000/municipios/{texto}")
-        municipios = respuesta.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:5000/municipios/{texto}") as response:
+                municipios = await response.json()
 
-        if isinstance(municipios, dict) and "error" in municipios:
-            raise ValueError("Estado inválido")
+                if isinstance(municipios, dict) and "error" in municipios:
+                    raise ValueError("Estado inválido")
 
         teclado = teclado_dinamico(municipios)
         await update.message.reply_text("Selecciona tu municipio:", reply_markup=teclado)
@@ -342,7 +350,7 @@ async def municipio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
 
     if texto == "↩️ Corregir anterior":
-        estados = obtener_opciones("estado")
+        estados = await obtener_opciones("estado")
         await update.message.reply_text("Selecciona tu estado nuevamente:", reply_markup=teclado_dinamico(estados))
         return ESTADO
 
@@ -351,11 +359,12 @@ async def municipio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     estado = context.user_data["estado"]
 
     try:
-        respuesta = requests.get(f"http://localhost:5000/parroquias/{estado}/{texto}")
-        parroquias = respuesta.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:5000/parroquias/{estado}/{texto}") as response:
+                parroquias = await response.json()
 
-        if isinstance(parroquias, dict) and "error" in parroquias:
-            raise ValueError("Municipio inválido")
+                if isinstance(parroquias, dict) and "error" in parroquias:
+                    raise ValueError("Municipio inválido")
 
         teclado = teclado_dinamico(parroquias)
         await update.message.reply_text("Selecciona tu parroquia:", reply_markup=teclado)
@@ -370,7 +379,7 @@ async def parroquia(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if texto == "↩️ Corregir anterior":
         estado = context.user_data["estado"]
-        municipios = obtener_opciones("municipio", estado=estado)
+        municipios = await obtener_opciones("municipio", estado=estado)
         await update.message.reply_text("Selecciona tu municipio nuevamente:", reply_markup=teclado_dinamico(municipios))
         return MUNICIPIO
 
@@ -415,14 +424,14 @@ async def mostrar_teclado_dinamico(update: Update, context: ContextTypes.DEFAULT
 
     # Carga de opciones según campo
     if campo == "estado":
-        opciones = obtener_opciones("estado")
+        opciones = await obtener_opciones("estado")
     elif campo == "municipio":
         estado = context.user_data.get("estado")
-        opciones = obtener_opciones("municipio", estado=estado)
+        opciones = await obtener_opciones("municipio", estado=estado)
     elif campo == "parroquia":
         estado = context.user_data.get("estado")
         municipio = context.user_data.get("municipio")
-        opciones = obtener_opciones("parroquia", estado=estado, municipio=municipio)
+        opciones = await obtener_opciones("parroquia", estado=estado, municipio=municipio)
     else:
         await query.edit_message_text("❌ Error: campo no reconocido.")
         return RESUMEN
@@ -462,11 +471,13 @@ async def manejar_callback_resumen(update: Update, context: ContextTypes.DEFAULT
         print(f"Datos a enviar: {datos}")  # Debugging
         print(f"id_usuario: {datos['id_usuario']}")  # Debugging
         try:
-            respuesta = requests.post("http://localhost:5000/registrar", json=datos)
-            if respuesta.status_code in [200, 201]:
-                await query.edit_message_text("✅ ¡Registro completado con éxito!")
-            else:
-                await query.edit_message_text("⚠️ Hubo un error al guardar tus datos.")
+            # respuesta = requests.post("http://localhost:5000/registrar", json=datos)
+            async with aiohttp.ClientSession() as session:
+                async with session.post("http://localhost:5000/registrar", json=datos) as respuesta:
+                    if respuesta.status in [200, 201]:
+                        await query.edit_message_text("✅ ¡Registro completado con éxito!")
+                    else:
+                        await query.edit_message_text("⚠️ Hubo un error al guardar tus datos.")
         except:
             await query.edit_message_text("❌ No se pudo conectar con el servidor.")
         return ConversationHandler.END
