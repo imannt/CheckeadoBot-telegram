@@ -2,8 +2,11 @@ from flask import Flask, jsonify, request
 import mysql.connector.pooling
 from mysql.connector import Error
 from datetime import datetime
-from dotenv import load_dotenv
-import os
+
+from config import *
+
+# from dotenv import load_dotenv
+# import os
 
 # Formatear la fecha y hora antes de devolver la respuesta
 dias_semana = {
@@ -21,10 +24,10 @@ app = Flask(__name__)
 
 # Conexión a base principal: fundacion_eventos
 conexion_main = {
-    "host": os.getenv("DB_HOST"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "database": os.getenv("DB_NAME_MAIN")
+    "host": DB_HOST,
+    "user": DB_USER,
+    "password": DB_PASSWORD,
+    "database": DB_NAME_MAIN
 }
 
 pool_main = mysql.connector.pooling.MySQLConnectionPool(
