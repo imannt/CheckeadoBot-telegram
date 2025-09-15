@@ -1,5 +1,8 @@
-Flask
-python-dotenv
-python-telegram-bot
-requests
-mysql-connector-python
+# Paquetes principales
+python-telegram-bot==20.7
+Flask==2.3.3
+mysql-connector-python==8.1.0
+aiohttp==3.8.5
+
+# Utilidades
+python-dotenv==1.0.0

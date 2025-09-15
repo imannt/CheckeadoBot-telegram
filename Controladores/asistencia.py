@@ -22,7 +22,7 @@ async def registrar_evento_command(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     
     try:
-        # 🆕 Usamos aiohttp para la llamada a la API de forma asíncrona
+        # Usamos aiohttp 
         async with aiohttp.ClientSession() as session:
             async with session.get(f"http://localhost:5000/verificar/{user_id}") as respuesta:
                 resultado = await respuesta.json()
@@ -38,9 +38,7 @@ async def registrar_evento_command(update: Update, context: ContextTypes.DEFAULT
         return EVENTO_CLAVE
     else:
         # El usuario no está registrado, se lo notificamos y terminamos la conversación
-        await update.message.reply_text(
-            "👋 Parece que aún no estás registrado. Por favor, usa el comando /start para iniciar el proceso de registro."
-        )
+        await update.message.reply_text("👋 *Parece que aún no estás registrado.*\nPor favor, usa el comando /start para iniciar el proceso de registro.", parse_mode="Markdown")
         return ConversationHandler.END
 
 async def evento_clave(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,7 +117,8 @@ async def evento_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     nombre_evento = evento_info.get('nombre')
 
                     if respuesta.status in [201, 200]:
-                        await query.edit_message_text(f"""{resultado.get('mensaje')}\n *Detalles del registro:*\n
+                        await query.edit_message_text(f"""{resultado.get('mensaje')}\n 
+*Detalles del registro:*\n
 *Evento:* {nombre_evento}
 *Fecha de registro:* {fecha_registro}
 *Hora de registro:* {hora_registro}

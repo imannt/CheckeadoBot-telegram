@@ -5,14 +5,13 @@ env/
 
 # Ignora archivos temporales de Python
 __pycache__/
-*.pyc
 
-# ignorar proyecto checkeado_dashboard
-checkeado_dashboard/
+# Ignorar archivos compilados de Python
+*.pyc
 
 # Archivos sensibles
 .env
-
+.config
 # Bases de datos locales
 *.db
 

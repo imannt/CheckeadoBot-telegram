@@ -1,11 +1,22 @@
 from flask import Flask, jsonify, request
 import mysql.connector.pooling
+from mysql.connector import Error
 from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+# Formatear la fecha y hora antes de devolver la respuesta
+dias_semana = {
+    "Monday": "Lunes",
+    "Tuesday": "Martes",
+    "Wednesday": "Miércoles",
+    "Thursday": "Jueves",
+    "Friday": "Viernes",
+    "Saturday": "Sábado",
+    "Sunday": "Domingo"
+}
 
+load_dotenv()
 app = Flask(__name__)
 
 # Conexión a base principal: fundacion_eventos
@@ -55,18 +66,6 @@ def verificar_usuario(id_usuario):
         return jsonify({"registrado": False})
 
 # Ruta: registrar nuevo participante
-from mysql.connector import Error
-
-# Formatear la fecha y hora antes de devolver la respuesta
-dias_semana = {
-    "Monday": "Lunes",
-    "Tuesday": "Martes",
-    "Wednesday": "Miércoles",
-    "Thursday": "Jueves",
-    "Friday": "Viernes",
-    "Saturday": "Sábado",
-    "Sunday": "Domingo"
-}
 
 @app.route("/registrar", methods=["POST"])
 def registrar_participante():
@@ -186,13 +185,12 @@ def obtener_evento_por_clave(clave):
                 evento['hora_inicio'] = hora_inicio.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
                 evento['hora_fin'] = hora_fin.strftime("%I:%M %p").replace("AM", "a. m.").replace("PM", "p. m.")
 
-
             return jsonify(evento), 200
         else:
             return jsonify({"error": "Evento no encontrado"}), 404
             
     except Error as err:
-        return jsonify({"error": str(err)}), 500
+        return jsonify({"error": "Error interno del servidor"}), 500
     finally:
         if cnx and cnx.is_connected():
             cursor.close()
